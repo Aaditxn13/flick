@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="An agent skill that animates SVG UI icons from a sentence, without changing the drawing.">
+<title>flick</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+html, body { margin: 0; }
+/* Layout: single docs column (~68ch) with a numbered contents rail on wide screens; monochrome, the icons supply the motion */
+:root {
+  --bg: #fafafa; --ink: #111111; --muted: #6b6b6b; --line: #e5e5e5; --soft: #f1f1f1; --card: #ffffff;
+  --f-ui: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0b0b0b; --ink: #ececec; --muted: #8e8e8e; --line: #232323; --soft: #151515; --card: #101010; color-scheme: dark; } }
+:root[data-theme="dark"] { --bg: #0b0b0b; --ink: #ececec; --muted: #8e8e8e; --line: #232323; --soft: #151515; --card: #101010; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.65 var(--f-ui); }
+a { color: inherit; text-underline-offset: 3px; text-decoration-color: var(--line); }
+a:hover { text-decoration-color: currentColor; }
+.page { max-width: 1080px; margin: 0 auto; padding-inline: 20px; padding-block: 0 64px; }
+nav.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px; padding-block: 18px; border-bottom: 1px solid var(--line); }
+nav.top .brand { font: 500 14px var(--f-mono); text-decoration: none; display: flex; align-items: center; gap: 8px; }
+nav.top ul { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 0; padding: 0; font-size: 14px; color: var(--muted); }
+nav.top ul a { text-decoration: none; }
+nav.top ul a:hover { color: var(--ink); }
+
+.grid { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 56px; padding-top: 48px; }
+@media (max-width: 900px) { .grid { grid-template-columns: minmax(0,1fr); gap: 0; } .rail { display: none; } }
+.rail { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; font-size: 13px; }
+.rail ol, .toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rail a, .toc a { text-decoration: none; color: var(--muted); display: flex; gap: 10px; }
+.rail a:hover, .toc a:hover { color: var(--ink); }
+.num { font: 12px var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; min-width: 1.6em; }
+main { min-width: 0; max-width: 720px; }
+
+.hero h1 { font: 500 clamp(30px, 5vw, 44px)/1.05 var(--f-mono); letter-spacing: -.03em; margin: 0 0 14px; }
+.hero p.lead { font-size: 18px; color: var(--muted); margin: 0 0 26px; max-width: 34em; text-wrap: pretty; }
+.hero p.lead strong { color: var(--ink); font-weight: 500; }
+.strip { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.strip .demo { width: 48px; height: 48px; }
+.strip .demo svg { width: 24px; height: 24px; }
+.strip-note { font: 12px var(--f-mono); color: var(--muted); margin-left: 8px; }
+
+.toc { margin: 40px 0 8px; padding: 18px 0; border-block: 1px solid var(--line); }
+@media (min-width: 901px) { .toc { display: none; } }
+
+section { padding-top: 56px; scroll-margin-top: 16px; }
+h2 { font: 500 13px var(--f-mono); color: var(--muted); letter-spacing: .02em; margin: 0 0 6px; display: flex; gap: 10px; }
+h3 { font-size: 26px; font-weight: 500; letter-spacing: -.02em; line-height: 1.2; margin: 0 0 14px; text-wrap: balance; }
+p { margin: 0 0 14px; max-width: 66ch; }
+.muted { color: var(--muted); }
+
+/* command blocks */
+.tabs { display: flex; gap: 2px; margin-bottom: -1px; position: relative; flex-wrap: wrap; }
+.tab { font: 500 12px var(--f-mono); color: var(--muted); background: transparent; border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0; padding: 8px 12px; cursor: pointer; }
+.tab[aria-selected="true"] { color: var(--ink); background: var(--soft); border-color: var(--line); }
+.cmd { display: flex; align-items: center; gap: 12px; background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 14px 14px 14px 18px; font: 14px/1.5 var(--f-mono); }
+.tabs + .cmd { border-top-left-radius: 0; }
+.cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; }
+.cmd .p { color: var(--muted); user-select: none; margin-right: 10px; }
+.cmd .arg { color: var(--muted); }
+.copy { font: 500 12px var(--f-ui); color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 7px; padding: 6px 10px; cursor: pointer; flex: none; }
+.copy:hover { border-color: var(--muted); }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.note { font-size: 13px; color: var(--muted); margin-top: 10px; }
+code.inline { font: 13px var(--f-mono); background: var(--soft); border: 1px solid var(--line); padding: 1px 5px; border-radius: 5px; }
+
+.prompts { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.prompts li { border-bottom: 1px solid var(--line); }
+.prompts button { width: 100%; text-align: left; background: none; border: 0; padding: 11px 2px; font: 14px/1.4 var(--f-mono); color: var(--ink); cursor: pointer; display: flex; gap: 12px; align-items: baseline; }
+.prompts button .slash { color: var(--muted); }
+.prompts button .kind { margin-left: auto; font: 12px var(--f-ui); color: var(--muted); white-space: nowrap; }
+.prompts button:hover .kind::after { content: " · copy"; }
+.prompts button.done .kind::after { content: " · copied"; }
+
+.steps { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 18px; counter-reset: s; }
+.steps li { display: grid; grid-template-columns: 2em minmax(0,1fr); gap: 4px 12px; }
+.steps li::before { counter-increment: s; content: counter(s); font: 13px/1.65 var(--f-mono); color: var(--muted); }
+.steps b { font-weight: 500; }
+
+/* demos */
+.demo { display: grid; place-items: center; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); cursor: pointer; padding: 0; }
+.demo:hover { border-color: var(--muted); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-top: 18px; }
+.card { display: grid; grid-template-rows: auto auto 1fr auto; gap: 6px; border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: var(--card); }
+.card .demo { height: 104px; border-style: dashed; }
+.card .demo svg { width: 40px; height: 40px; }
+.card .row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 6px; }
+.card .name { font: 500 14px var(--f-mono); }
+.card .trig { font: 11px var(--f-mono); color: var(--muted); }
+.card .desc { font-size: 13px; color: var(--muted); line-height: 1.5; margin: 0; }
+.card .ask { font: 12px/1.45 var(--f-mono); color: var(--ink); border-top: 1px solid var(--line); padding-top: 8px; margin: 0; }
+.card .ask::before { content: "› "; color: var(--muted); }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tablewrap { overflow-x: auto; margin-top: 14px; }
+th, td { text-align: left; padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 500 12px var(--f-mono); color: var(--muted); }
+td:first-child { font: 13px var(--f-mono); white-space: nowrap; }
+td .def { font-family: var(--f-mono); font-size: 13px; }
+
+.two { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin-top: 16px; }
+@media (max-width: 600px) { .two { grid-template-columns: minmax(0,1fr); } }
+.box { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: var(--card); }
+.box h4 { margin: 0 0 8px; font: 500 13px var(--f-mono); }
+.box ul { margin: 0; padding-left: 18px; font-size: 14px; display: grid; gap: 4px; }
+.box.no { background: transparent; border-style: dashed; }
+
+pre.block { background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; font: 13px/1.7 var(--f-mono); overflow-x: auto; margin: 14px 0; }
+pre.block .c { color: var(--muted); }
+footer { margin-top: 72px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: space-between; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <nav class="top" aria-label="Site">
+    <a class="brand" href="#top">flick</a>
+    <ul>
+      <li><a href="#install">Install</a></li>
+      <li><a href="#use">Use</a></li>
+      <li><a href="#styles">Styles</a></li>
+      <li><a href="#options">Options</a></li>
+      <li><a href="https://github.com/Aaditxn13/flick">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <div class="grid" id="top">
+    <aside class="rail" aria-label="Contents">
+      <ol>
+        <li><a href="#install"><span class="num">01</span>Install</a></li>
+        <li><a href="#use"><span class="num">02</span>Add your idea</a></li>
+        <li><a href="#how"><span class="num">03</span>How it works</a></li>
+        <li><a href="#styles"><span class="num">04</span>Styles</a></li>
+        <li><a href="#options"><span class="num">05</span>Options</a></li>
+        <li><a href="#guarantee"><span class="num">06</span>Your SVG stays yours</a></li>
+        <li><a href="#cli"><span class="num">07</span>CLI</a></li>
+      </ol>
+    </aside>
+
+    <main>
+      <div class="hero">
+        <h1>flick</h1>
+        <p class="lead">An agent skill that animates UI icons from a sentence. Describe how the icon should move; <strong>your SVG stays exactly as it is</strong> and only motion is added.</p>
+        <div class="strip"><button class="demo" data-trigger="hover" aria-label="bell icon, wiggle, plays on hover"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-bell" aria-hidden="true" focusable="false">
+<style data-motion="">
+.icon-bell .bell-body, .icon-bell .bell-clapper { transform-origin: 12px 3px; }
+.icon-bell:hover .bell-body, button:hover > .icon-bell .bell-body { animation: bell-ring .6s cubic-bezier(.2,.8,.2,1); }
+.icon-bell:hover .bell-clapper, button:hover > .icon-bell .bell-clapper { animation: bell-ring .6s cubic-bezier(.2,.8,.2,1) .04s; }
+@keyframes bell-ring { 0%,100% { transform: rotate(0) } 20% { transform: rotate(14deg) } 40% { transform: rotate(-10deg) } 60% { transform: rotate(6deg) } 80% { transform: rotate(-3deg) } }
+@media (prefers-reduced-motion: reduce) { .icon-bell, .icon-bell * { animation: none !important; transition: none !important; } }
+</style>
+<path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 8 2.5 8h-17S6 15 6 9Z" class="bell-body"/><path d="M10.3 20a1.9 1.9 0 0 0 3.4 0" class="bell-clapper"/></svg></button><button class="demo" data-trigger="click" aria-label="star icon, pop, plays on click"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-star" aria-hidden="true" focusable="false">
+<style data-motion="">
+.icon-star .star-shape { transform-box: fill-box; transform-origin: center; }
+.icon-star.is-animating .star-shape { animation: star-pop .5s cubic-bezier(.34,1.56,.64,1); }
+@keyframes star-pop { 0% { transform: scale(1) } 40% { transform: scale(1.22) } 70% { transform: scale(.94) } 100% { transform: scale(1) } }
+@media (prefers-reduced-motion: reduce) { .icon-star, .icon-star * { animation: none !important; transition: none !important; } }
+</style>
+<polygon points="12 3 14.8 8.8 21 9.6 16.5 14 17.6 20.2 12 17.3 6.4 20.2 7.5 14 3 9.6 9.2 8.8" class="star-shape"/></svg></button><button class="demo" data-trigger="hover" aria-label="arrow icon, nudge, plays on hover"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-arrow" aria-hidden="true" focusable="false">
+<style data-motion="">
+.icon-arrow:hover .arrow-all, button:hover > .icon-arrow .arrow-all { animation: arrow-nudge .4s cubic-bezier(.2,.8,.2,1); }
+@keyframes arrow-nudge { 0%,100% { transform: translateX(0) } 50% { transform: translateX(3px) } }
+@media (prefers-reduced-motion: reduce) { .icon-arrow, .icon-arrow * { animation: none !important; transition: none !important; } }
+</style>
+<line x1="5" y1="12" x2="19" y2="12" class="arrow-all"/><polyline points="13 6 19 12 13 18" class="arrow-all"/></svg></button><button class="demo" data-trigger="hover" aria-label="refresh icon, spin, plays on hover"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-refresh" aria-hidden="true" focusable="false">
+<style data-motion="">
+.icon-refresh .refresh-all { transform-origin: 12px 12px; }
+.icon-refresh:hover .refresh-all, button:hover > .icon-refresh .refresh-all { animation: refresh-spin .6s cubic-bezier(.4,0,.2,1); }
+@keyframes refresh-spin { from { transform: rotate(0) } to { transform: rotate(360deg) } }
+@media (prefers-reduced-motion: reduce) { .icon-refresh, .icon-refresh * { animation: none !important; transition: none !important; } }
+</style>
+<path d="M20 12a8 8 0 1 1-2.3-5.7L20 8.6" class="refresh-all"/><path d="M20 3.5v5.1h-5" class="refresh-all"/></svg></button><button class="demo" data-trigger="hover" aria-label="trash icon, lid, plays on hover"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-trash" aria-hidden="true" focusable="false">
+<style data-motion="">
+.icon-trash .trash-lid { transform-origin: 4px 7px; transition: transform .3s cubic-bezier(.2,.8,.2,1); }
+.icon-trash:hover .trash-lid, button:hover > .icon-trash .trash-lid { transform: translateY(-1px) rotate(-16deg); }
+@media (prefers-reduced-motion: reduce) { .icon-trash, .icon-trash * { animation: none !important; transition: none !important; } }
+</style>
+<path d="M4 7h16" class="trash-lid"/><path d="M9 7V4h6v3" class="trash-lid"/><path d="M6 7l1 13h10l1-13"/></svg></button><button class="demo" data-trigger="state" aria-label="menu icon, toggle, plays toggles"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-menu" aria-hidden="true" focusable="false" data-state="closed">
+<style data-motion="">
+.icon-menu .menu-top, .icon-menu .menu-mid, .icon-menu .menu-bot { transform-origin: 12px 12px; transition: transform .3s cubic-bezier(.4,0,.2,1), opacity .2s cubic-bezier(.4,0,.2,1); }
+.icon-menu[data-state="open"] .menu-top { transform: rotate(45deg) translateY(6px); }
+.icon-menu[data-state="open"] .menu-mid { opacity: 0; }
+.icon-menu[data-state="open"] .menu-bot { transform: rotate(-45deg) translateY(-6px); }
+@media (prefers-reduced-motion: reduce) { .icon-menu, .icon-menu * { animation: none !important; transition: none !important; } }
+</style>
+<line x1="4" y1="6" x2="20" y2="6" class="menu-top"/><line x1="4" y1="12" x2="20" y2="12" class="menu-mid"/><line x1="4" y1="18" x2="20" y2="18" class="menu-bot"/></svg></button><button class="demo" data-trigger="entrance" aria-label="check icon, draw, plays on appear"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-check" aria-hidden="true" focusable="false">
+<style data-motion="">
+.icon-check .check-ring, .icon-check .check-tick { stroke-dasharray: 1; }
+.icon-check.is-animating .check-ring { animation: check-draw .45s cubic-bezier(.2,.8,.2,1) both; }
+.icon-check.is-animating .check-tick { animation: check-draw .3s cubic-bezier(.2,.8,.2,1) .35s both; }
+@keyframes check-draw { from { stroke-dashoffset: 1 } to { stroke-dashoffset: 0 } }
+@media (prefers-reduced-motion: reduce) { .icon-check, .icon-check * { animation: none !important; transition: none !important; } }
+</style>
+<circle cx="12" cy="12" r="9" class="check-ring" pathLength="1"/><polyline points="8 12.5 11 15.5 16 9.5" class="check-tick" pathLength="1"/></svg></button><span class="strip-note">hover or tap them</span></div>
+      </div>
+
+      <nav class="toc" aria-label="Contents">
+        <ol>
+          <li><a href="#install"><span class="num">01</span>Install</a></li>
+          <li><a href="#use"><span class="num">02</span>Add your idea</a></li>
+          <li><a href="#how"><span class="num">03</span>How it works</a></li>
+          <li><a href="#styles"><span class="num">04</span>Styles</a></li>
+          <li><a href="#options"><span class="num">05</span>Options</a></li>
+          <li><a href="#guarantee"><span class="num">06</span>Your SVG stays yours</a></li>
+          <li><a href="#cli"><span class="num">07</span>CLI</a></li>
+        </ol>
+      </nav>
+
+      <section id="install">
+        <h2><span class="num">01</span>Install</h2>
+        <h3>One command</h3>
+        <div class="tabs" role="tablist" aria-label="Install options">
+          <button class="tab" role="tab" aria-selected="true" data-cmd="npx skills add Aaditxn13/flick">Any agent</button>
+          <button class="tab" role="tab" aria-selected="false" data-cmd="npx skills add Aaditxn13/flick --agent claude-code">Claude Code</button>
+          <button class="tab" role="tab" aria-selected="false" data-cmd="npx skills add Aaditxn13/flick -g -y">All projects</button>
+        </div>
+        <div class="cmd"><code id="installCmd"><span class="p">$</span>npx skills add Aaditxn13/flick</code><button class="copy" data-copy-from="installCmd">Copy</button></div>
+        <p class="note">Adds one folder: the skill's instructions and a small checking script. No dependencies; Node 18+ runs the checks. If your agent was already open, start a new session so it picks the skill up.</p>
+      </section>
+
+      <section id="use">
+        <h2><span class="num">02</span>Add your idea</h2>
+        <h3>Say which icon, and how it should move</h3>
+        <div class="cmd"><code id="useCmd"><span class="p">›</span>/flick <span class="arg">&lt;your idea&gt;</span></code><button class="copy" data-copy-text="/flick ">Copy</button></div>
+        <p class="note">Paste your SVG in the same message or point at the file. No SVG yet? Name the icon and it draws a simple one first, then animates it. You can also just ask in plain words, like "animate this icon so it…"; the skill picks it up on its own.</p>
+        <ul class="prompts" aria-label="Example ideas, click to copy">
+          <li><button data-copy-text="/flick bell that rings on hover"><span><span class="slash">/flick</span> bell that rings on hover</span><span class="kind">plain words</span></button></li>
+          <li><button data-copy-text="/flick heart that pops when liked, kinda bouncy"><span><span class="slash">/flick</span> heart that pops when liked, kinda bouncy</span><span class="kind">feel</span></button></li>
+          <li><button data-copy-text="/flick ./icons/trash.svg lid lifts on hover, slow"><span><span class="slash">/flick</span> ./icons/trash.svg lid lifts on hover, slow</span><span class="kind">your file</span></button></li>
+          <li><button data-copy-text="/flick bell: wiggle · hover · playful · large · 2x · 500ms"><span><span class="slash">/flick</span> bell: wiggle · hover · playful · large · 2x · 500ms</span><span class="kind">shorthand</span></button></li>
+          <li><button data-copy-text="/flick send: pop then fly-through, on click"><span><span class="slash">/flick</span> send: pop then fly-through, on click</span><span class="kind">two styles</span></button></li>
+          <li><button data-copy-text="/flick menu that turns into an X when open, as a React component"><span><span class="slash">/flick</span> menu that turns into an X when open, as a React component</span><span class="kind">state + output</span></button></li>
+          <li><button data-copy-text="/flick download icon, only the arrow moves, like a progress hint, loop with a pause"><span><span class="slash">/flick</span> download icon, only the arrow moves, loop with a pause</span><span class="kind">parts + repeat</span></button></li>
+          <li><button data-copy-text="/flick notification bell like iOS, subtle"><span><span class="slash">/flick</span> notification bell like iOS, subtle</span><span class="kind">reference</span></button></li>
+        </ul>
+        <p class="note">You get <code class="inline">bell.animated.svg</code> next to your file, plus one line on how to trigger it from your app.</p>
+      </section>
+
+      <section id="how">
+        <h2><span class="num">03</span>How it works</h2>
+        <h3>A plan, not a redraw</h3>
+        <ol class="steps">
+          <li><div><b>Reads your SVG</b> and numbers its shapes. The file itself is never edited.</div></li>
+          <li><div><b>Turns your idea into a motion plan:</b> which shapes move, the style, the pivot point, timing and trigger.</div></li>
+          <li><div><b>A script applies the plan</b> and checks every shape against your original. If anything would change, it refuses and the plan gets fixed, not your icon.</div></li>
+          <li><div><b>Hands you the animated SVG</b> with a one-line spec and the class or <code class="inline">data-state</code> your app toggles to play it.</div></li>
+        </ol>
+      </section>
+
+      <section id="styles">
+        <h2><span class="num">04</span>Styles</h2>
+        <h3>Name a style, or just describe it</h3>
+        <p class="muted">Every demo below is a plain static icon plus a motion plan, run through the skill's own engine. Hover, click or tap each one.</p>
+        <div class="cards">
+          <article class="card">
+            <button class="demo" data-trigger="hover" aria-label="wiggle demo on a bell icon, plays on hover"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-bell" aria-hidden="true" focusable="false">
+<style data-motion="">
+.icon-bell .bell-body, .icon-bell .bell-clapper { transform-origin: 12px 3px; }
+.icon-bell:hover .bell-body, button:hover > .icon-bell .bell-body { animation: bell-ring .6s cubic-bezier(.2,.8,.2,1); }
+.icon-bell:hover .bell-clapper, button:hover > .icon-bell .bell-clapper { animation: bell-ring .6s cubic-bezier(.2,.8,.2,1) .04s; }
+@keyframes bell-ring { 0%,100% { transform: rotate(0) } 20% { transform: rotate(14deg) } 40% { transform: rotate(-10deg) } 60% { transform: rotate(6deg) } 80% { transform: rotate(-3deg) } }
+@media (prefers-reduced-motion: reduce) { .icon-bell, .icon-bell * { animation: none !important; transition: none !important; } }
+</style>
+<path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 8 2.5 8h-17S6 15 6 9Z" class="bell-body"/><path d="M10.3 20a1.9 1.9 0 0 0 3.4 0" class="bell-clapper"/></svg></button>
+            <div class="row"><span class="name">wiggle</span><span class="trig">on hover</span></div>
+            <p class="desc">Rotates back and forth from where it hangs, settling down.</p>
+            <p class="ask">bell that rings on hover</p>
+          </article>
+          <article class="card">
+            <button class="demo" data-trigger="click" aria-label="pop demo on a star icon, plays on click"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-star" aria-hidden="true" focusable="false">
+<style data-motion="">
+.icon-star .star-shape { transform-box: fill-box; transform-origin: center; }
+.icon-star.is-animating .star-shape { animation: star-pop .5s cubic-bezier(.34,1.56,.64,1); }
+@keyframes star-pop { 0% { transform: scale(1) } 40% { transform: scale(1.22) } 70% { transform: scale(.94) } 100% { transform: scale(1) } }
+@media (prefers-reduced-motion: reduce) { .icon-star, .icon-star * { animation: none !important; transition: none !important; } }
+</style>
+<polygon points="12 3 14.8 8.8 21 9.6 16.5 14 17.6 20.2 12 17.3 6.4 20.2 7.5 14 3 9.6 9.2 8.8" class="star-shape"/></svg></button>
+            <div class="row"><span class="name">pop</span><span class="trig">on click</span></div>
+            <p class="desc">Scales up past full size and settles, with overshoot.</p>
+            <p class="ask">star that pops when favorited, bouncy</p>
+          </article>
+          <article class="card">
+            <button class="demo" data-trigger="click" aria-label="shake demo on a lock icon, plays on click"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-lock" aria-hidden="true" focusable="false">
+<style data-motion="">
+.icon-lock.is-animating .lock-all { animation: lock-shake .42s cubic-bezier(.4,0,.2,1); }
+@keyframes lock-shake { 0%,100% { transform: translateX(0) } 20% { transform: translateX(-2px) } 40% { transform: translateX(2px) } 60% { transform: translateX(-1.5px) } 80% { transform: translateX(1px) } }
+@media (prefers-reduced-motion: reduce) { .icon-lock, .icon-lock * { animation: none !important; transition: none !important; } }
+</style>
+<rect x="5" y="11" width="14" height="10" rx="2" class="lock-all"/><path d="M8 11V7a4 4 0 0 1 8 0v4" class="lock-all"/></svg></button>
+            <div class="row"><span class="name">shake</span><span class="trig">on click</span></div>
+            <p class="desc">Quick side-to-side shake that says no.</p>
+            <p class="ask">lock that shakes when the password is wrong</p>
+          </article>
+          <article class="card">
+            <button class="demo" data-trigger="hover" aria-label="nudge demo on a arrow icon, plays on hover"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-arrow" aria-hidden="true" focusable="false">
+<style data-motion="">
+.icon-arrow:hover .arrow-all, button:hover > .icon-arrow .arrow-all { animation: arrow-nudge .4s cubic-bezier(.2,.8,.2,1); }
+@keyframes arrow-nudge { 0%,100% { transform: translateX(0) } 50% { transform: translateX(3px) } }
+@media (prefers-reduced-motion: reduce) { .icon-arrow, .icon-arrow * { animation: none !important; transition: none !important; } }
+</style>
+<line x1="5" y1="12" x2="19" y2="12" class="arrow-all"/><polyline points="13 6 19 12 13 18" class="arrow-all"/></svg></button>
+            <div class="row"><span class="name">nudge</span><span class="trig">on hover</span></div>
+            <p class="desc">Moves a couple of pixels the way it points, and back.</p>
+            <p class="ask">arrow that nudges forward on hover</p>
+          </article>
+          <article class="card">
+            <button class="demo" data-trigger="click" aria-label="fly-through demo on a send icon, plays on click"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-send" aria-hidden="true" focusable="false">
+<style data-motion="">
+.icon-send.is-animating .send-plane { animation: send-fly .7s cubic-bezier(.4,0,.2,1); }
+@keyframes send-fly { 0% { transform: translate(0,0); opacity: 1 } 40% { transform: translate(7px,-7px); opacity: 0 } 41% { transform: translate(-7px,7px); opacity: 0 } 100% { transform: translate(0,0); opacity: 1 } }
+@media (prefers-reduced-motion: reduce) { .icon-send, .icon-send * { animation: none !important; transition: none !important; } }
+</style>
+<path d="M21 3 10 14" class="send-plane"/><path d="M21 3 14.5 21 11 14 4 10.5Z" class="send-plane"/></svg></button>
+            <div class="row"><span class="name">fly-through</span><span class="trig">on click</span></div>
+            <p class="desc">Leaves in its direction, re-enters from the other side.</p>
+            <p class="ask">send icon that flies off and comes back when clicked</p>
+          </article>
+          <article class="card">
+            <button class="demo" data-trigger="hover" aria-label="bounce demo on a pin icon, plays on hover"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-pin" aria-hidden="true" focusable="false">
+<style data-motion="">
+.icon-pin .pin-all { transform-origin: 12px 21px; }
+.icon-pin:hover .pin-all, button:hover > .icon-pin .pin-all { animation: pin-bounce .6s cubic-bezier(.2,.8,.2,1); }
+@keyframes pin-bounce { 0%,100% { transform: translateY(0) scaleY(1) } 30% { transform: translateY(-3px) scaleY(1.02) } 55% { transform: translateY(0) scaleY(.94) } 75% { transform: translateY(-1px) scaleY(1) } }
+@media (prefers-reduced-motion: reduce) { .icon-pin, .icon-pin * { animation: none !important; transition: none !important; } }
+</style>
+<path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11Z" class="pin-all"/><circle cx="12" cy="10" r="2" class="pin-all"/></svg></button>
+            <div class="row"><span class="name">bounce</span><span class="trig">on hover</span></div>
+            <p class="desc">Hops up and lands with a small squash.</p>
+            <p class="ask">map pin that bounces on hover</p>
+          </article>
+          <article class="card">
+            <button class="demo" data-trigger="hover" aria-label="spin demo on a refresh icon, plays on hover"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-refresh" aria-hidden="true" focusable="false">
+<style data-motion="">
+.icon-refresh .refresh-all { transform-origin: 12px 12px; }
+.icon-refresh:hover .refresh-all, button:hover > .icon-refresh .refresh-all { animation: refresh-spin .6s cubic-bezier(.4,0,.2,1); }
+@keyframes refresh-spin { from { transform: rotate(0) } to { transform: rotate(360deg) } }
+@media (prefers-reduced-motion: reduce) { .icon-refresh, .icon-refresh * { animation: none !important; transition: none !important; } }
+</style>
+<path d="M20 12a8 8 0 1 1-2.3-5.7L20 8.6" class="refresh-all"/><path d="M20 3.5v5.1h-5" class="refresh-all"/></svg></button>
+            <div class="row"><span class="name">spin</span><span class="trig">on hover</span></div>
+            <p class="desc">One full clockwise turn around its centre.</p>
+            <p class="ask">refresh icon that spins once on hover</p>
+          </article>
+          <article class="card">
+            <button class="demo" data-trigger="ambient" aria-label="pulse demo on a live icon, plays loops"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-live" aria-hidden="true" focusable="false">
+<style data-motion="">
+.icon-live .live-inner { animation: live-wave 1.6s ease-in-out infinite; }
+.icon-live .live-outer { animation: live-wave 1.6s ease-in-out .2s infinite; }
+@keyframes live-wave { 0%,100% { opacity: 1 } 50% { opacity: .2 } }
+@media (prefers-reduced-motion: reduce) { .icon-live, .icon-live * { animation: none !important; transition: none !important; } }
+</style>
+<circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 0 0 7" class="live-inner"/><path d="M15.5 8.5a5 5 0 0 1 0 7" class="live-inner"/><path d="M5.6 5.6a9 9 0 0 0 0 12.8" class="live-outer"/><path d="M18.4 5.6a9 9 0 0 1 0 12.8" class="live-outer"/></svg></button>
+            <div class="row"><span class="name">pulse</span><span class="trig">loops</span></div>
+            <p class="desc">Rings fade in and out from the centre, looping.</p>
+            <p class="ask">live indicator with waves pulsing out, loop</p>
+          </article>
+          <article class="card">
+            <button class="demo" data-trigger="entrance" aria-label="draw demo on a check icon, plays on appear"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-check" aria-hidden="true" focusable="false">
+<style data-motion="">
+.icon-check .check-ring, .icon-check .check-tick { stroke-dasharray: 1; }
+.icon-check.is-animating .check-ring { animation: check-draw .45s cubic-bezier(.2,.8,.2,1) both; }
+.icon-check.is-animating .check-tick { animation: check-draw .3s cubic-bezier(.2,.8,.2,1) .35s both; }
+@keyframes check-draw { from { stroke-dashoffset: 1 } to { stroke-dashoffset: 0 } }
+@media (prefers-reduced-motion: reduce) { .icon-check, .icon-check * { animation: none !important; transition: none !important; } }
+</style>
+<circle cx="12" cy="12" r="9" class="check-ring" pathLength="1"/><polyline points="8 12.5 11 15.5 16 9.5" class="check-tick" pathLength="1"/></svg></button>
+            <div class="row"><span class="name">draw</span><span class="trig">on appear</span></div>
+            <p class="desc">Strokes draw themselves in, one after another.</p>
+            <p class="ask">success check: ring draws, then the tick, when it appears</p>
+          </article>
+          <article class="card">
+            <button class="demo" data-trigger="hover" aria-label="lid demo on a trash icon, plays on hover"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-trash" aria-hidden="true" focusable="false">
+<style data-motion="">
+.icon-trash .trash-lid { transform-origin: 4px 7px; transition: transform .3s cubic-bezier(.2,.8,.2,1); }
+.icon-trash:hover .trash-lid, button:hover > .icon-trash .trash-lid { transform: translateY(-1px) rotate(-16deg); }
+@media (prefers-reduced-motion: reduce) { .icon-trash, .icon-trash * { animation: none !important; transition: none !important; } }
+</style>
+<path d="M4 7h16" class="trash-lid"/><path d="M9 7V4h6v3" class="trash-lid"/><path d="M6 7l1 13h10l1-13"/></svg></button>
+            <div class="row"><span class="name">lid</span><span class="trig">on hover</span></div>
+            <p class="desc">One part opens on its hinge while the rest stays put.</p>
+            <p class="ask">trash can whose lid lifts on hover</p>
+          </article>
+          <article class="card">
+            <button class="demo" data-trigger="state" aria-label="toggle demo on a menu icon, plays toggles"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-menu" aria-hidden="true" focusable="false" data-state="closed">
+<style data-motion="">
+.icon-menu .menu-top, .icon-menu .menu-mid, .icon-menu .menu-bot { transform-origin: 12px 12px; transition: transform .3s cubic-bezier(.4,0,.2,1), opacity .2s cubic-bezier(.4,0,.2,1); }
+.icon-menu[data-state="open"] .menu-top { transform: rotate(45deg) translateY(6px); }
+.icon-menu[data-state="open"] .menu-mid { opacity: 0; }
+.icon-menu[data-state="open"] .menu-bot { transform: rotate(-45deg) translateY(-6px); }
+@media (prefers-reduced-motion: reduce) { .icon-menu, .icon-menu * { animation: none !important; transition: none !important; } }
+</style>
+<line x1="4" y1="6" x2="20" y2="6" class="menu-top"/><line x1="4" y1="12" x2="20" y2="12" class="menu-mid"/><line x1="4" y1="18" x2="20" y2="18" class="menu-bot"/></svg></button>
+            <div class="row"><span class="name">toggle</span><span class="trig">toggles</span></div>
+            <p class="desc">Existing lines rearrange into a new symbol, and back.</p>
+            <p class="ask">menu that turns into an X when open</p>
+          </article>
+          <article class="card">
+            <button class="demo" data-trigger="hover" aria-label="blink demo on a eye icon, plays on hover"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-eye" aria-hidden="true" focusable="false">
+<style data-motion="">
+.icon-eye .eye-all { transform-origin: 12px 12px; }
+.icon-eye:hover .eye-all, button:hover > .icon-eye .eye-all { animation: eye-blink .32s cubic-bezier(.4,0,.2,1); }
+@keyframes eye-blink { 0%,100% { transform: scaleY(1) } 45%,55% { transform: scaleY(.1) } }
+@media (prefers-reduced-motion: reduce) { .icon-eye, .icon-eye * { animation: none !important; transition: none !important; } }
+</style>
+<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" class="eye-all"/><circle cx="12" cy="12" r="3" class="eye-all"/></svg></button>
+            <div class="row"><span class="name">blink</span><span class="trig">on hover</span></div>
+            <p class="desc">Squashes shut for a moment and opens again.</p>
+            <p class="ask">eye that blinks on hover</p>
+          </article>
+          <article class="card">
+            <button class="demo" data-trigger="hover" aria-label="tilt demo on a search icon, plays on hover"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-search" aria-hidden="true" focusable="false">
+<style data-motion="">
+.icon-search .search-all { transform-origin: 11px 11px; transition: transform .3s cubic-bezier(.34,1.56,.64,1); }
+.icon-search:hover .search-all, button:hover > .icon-search .search-all { transform: rotate(-14deg) scale(1.05); }
+@media (prefers-reduced-motion: reduce) { .icon-search, .icon-search * { animation: none !important; transition: none !important; } }
+</style>
+<circle cx="11" cy="11" r="7" class="search-all"/><line x1="16" y1="16" x2="21" y2="21" class="search-all"/></svg></button>
+            <div class="row"><span class="name">tilt</span><span class="trig">on hover</span></div>
+            <p class="desc">Leans and holds while hovered, returns on leave.</p>
+            <p class="ask">search icon that tilts while hovered</p>
+          </article>
+          <article class="card">
+            <button class="demo" data-trigger="ambient" aria-label="heartbeat demo on a heart icon, plays loops"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-heart" aria-hidden="true" focusable="false">
+<style data-motion="">
+.icon-heart .heart-shape { transform-box: fill-box; transform-origin: center; animation: heart-beat 1.4s ease-in-out infinite; }
+@keyframes heart-beat { 0%,40%,100% { transform: scale(1) } 10% { transform: scale(1.14) } 20% { transform: scale(1) } 30% { transform: scale(1.1) } }
+@media (prefers-reduced-motion: reduce) { .icon-heart, .icon-heart * { animation: none !important; transition: none !important; } }
+</style>
+<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z" class="heart-shape"/></svg></button>
+            <div class="row"><span class="name">heartbeat</span><span class="trig">loops</span></div>
+            <p class="desc">Two quick beats, then rest. Loops.</p>
+            <p class="ask">heart with a heartbeat, loop with a pause</p>
+          </article></div>
+        <p class="note">Also: swing, jelly, grow, flip, float, tada, fade, slide-in and color. Combine two with "then", e.g. <code class="inline">pop then wiggle</code>.</p>
+      </section>
+
+      <section id="options">
+        <h2><span class="num">05</span>Options</h2>
+        <h3>Say any of these, in any words</h3>
+        <p class="muted">Leave anything out and it picks a sensible default for that icon.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Option</th><th>Say</th><th>Default</th></tr></thead>
+          <tbody>
+            <tr><td>style</td><td>wiggle, pop, shake, nudge, spin, draw… or a verb like "jiggle"</td><td class="def">per icon</td></tr>
+            <tr><td>trigger</td><td>on hover, while hovered, when clicked, turns into, when it appears, while loading</td><td class="def">hover</td></tr>
+            <tr><td>feel</td><td>subtle, snappy, playful, bouncy, elastic</td><td class="def">subtle</td></tr>
+            <tr><td>intensity</td><td>tiny, small, medium, large, big</td><td class="def">medium</td></tr>
+            <tr><td>speed</td><td>slow, fast, or a duration like 500ms</td><td class="def">per trigger</td></tr>
+            <tr><td>repeat</td><td>once, 2x, loop, loop with a pause</td><td class="def">once</td></tr>
+            <tr><td>parts</td><td>"only the arrow", "the lid", "whole icon"</td><td class="def">what the style is about</td></tr>
+            <tr><td>timing</td><td>"after 200ms", "one after another"</td><td class="def">no delay</td></tr>
+            <tr><td>direction</td><td>up, down, forward, clockwise…</td><td class="def">what the icon means</td></tr>
+            <tr><td>output</td><td>SVG, React, Vue, for an &lt;img&gt;</td><td class="def">.svg file</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="guarantee">
+        <h2><span class="num">06</span>Your SVG stays yours</h2>
+        <h3>No new paths. No edited paths. Checked every time.</h3>
+        <p>The agent never writes your SVG. It writes a motion plan, and a script applies it with a short list of allowed edits, then compares every shape with your original before saving.</p>
+        <div class="two">
+          <div class="box"><h4>It can add</h4><ul>
+            <li>one <code class="inline">&lt;style&gt;</code> block</li>
+            <li>class names on your existing shapes</li>
+            <li>a bare <code class="inline">&lt;g&gt;</code> around a shape that already has a transform</li>
+            <li><code class="inline">pathLength="1"</code> for line drawing</li>
+            <li><code class="inline">aria-hidden</code> and <code class="inline">data-state</code> on the root</li>
+          </ul></div>
+          <div class="box no"><h4>It refuses</h4><ul>
+            <li>new or removed shapes, edited path data or coordinates</li>
+            <li>changed colors, stroke widths or viewBox</li>
+            <li>masks, filters, <code class="inline">url()</code>, morphing via CSS <code class="inline">d</code></li>
+            <li>CSS that reaches outside the icon</li>
+            <li>anything that changes the icon at rest</li>
+          </ul></div>
+        </div>
+        <p class="note">Asking for something that needs new shapes, like sparkles or play morphing into pause, gets the closest motion that keeps your drawing, with a note saying what was left out.</p>
+      </section>
+
+      <section id="cli">
+        <h2><span class="num">07</span>CLI</h2>
+        <h3>Use the engine directly</h3>
+        <p>The skill runs these for you. They live in the installed skill folder.</p>
+<pre class="block"><span class="c"># list the shapes, by index</span>
+node scripts/icon-motion.mjs inspect bell.svg
+<span class="c"># apply a motion plan → bell.animated.svg</span>
+node scripts/icon-motion.mjs apply bell.svg bell.motion.json
+<span class="c"># did any drawing change?</span>
+node scripts/icon-motion.mjs verify bell.svg bell.animated.svg</pre>
+      </section>
+
+      <footer>
+        <span>Motion principles from <a href="https://www.svg.guide/">Interactive SVG Animations</a> by Nanda Syahrasyad.</span>
+        <span>MIT · <a href="https://github.com/Aaditxn13/flick">Aaditxn13/flick</a></span>
+      </footer>
+    </main>
+  </div>
+</div>
+
+<script>
+(() => {
+  // demos: play each by its trigger on hover, focus, click or tap
+  const play = (svg) => { svg.classList.remove("is-animating"); void svg.getBoundingClientRect(); svg.classList.add("is-animating"); };
+  document.querySelectorAll(".demo").forEach((b) => {
+    const svg = b.querySelector("svg"), t = b.dataset.trigger;
+    if (t === "state") svg.setAttribute("data-state", "closed");
+    const enter = () => { if (t === "click" || t === "entrance") play(svg); if (t === "state") svg.setAttribute("data-state", "open"); };
+    const leave = () => { if (t === "state") svg.setAttribute("data-state", "closed"); };
+    b.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") enter(); });
+    b.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") leave(); });
+    b.addEventListener("focus", enter); b.addEventListener("blur", leave);
+    b.addEventListener("click", () => {
+      if (t === "state") svg.setAttribute("data-state", svg.getAttribute("data-state") === "open" ? "closed" : "open");
+      else if (t === "click" || t === "entrance") play(svg);
+      else if (t === "hover") { svg.style.animation = "none"; svg.querySelectorAll("*").forEach(n => n.style.animation = "none"); void svg.getBoundingClientRect(); svg.style.animation = ""; svg.querySelectorAll("*").forEach(n => n.style.animation = ""); }
+    });
+  });
+  // entrance demos draw once when they scroll into view
+  if ("IntersectionObserver" in window) {
+    const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { play(e.target.querySelector("svg")); io.unobserve(e.target); } }), { threshold: .6 });
+    document.querySelectorAll('.demo[data-trigger="entrance"]').forEach((b) => io.observe(b));
+  }
+  // install tabs
+  const cmd = document.getElementById("installCmd");
+  document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach((x) => x.setAttribute("aria-selected", x === tab ? "true" : "false"));
+    cmd.innerHTML = '<span class="p">$</span>' + tab.dataset.cmd.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  }));
+  // copy
+  async function copy(text, el, done) {
+    try { await navigator.clipboard.writeText(text); done(); }
+    catch { const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+  }
+  document.querySelectorAll(".copy").forEach((btn) => btn.addEventListener("click", () => {
+    const src = btn.dataset.copyFrom ? document.getElementById(btn.dataset.copyFrom) : btn.previousElementSibling;
+    const text = btn.dataset.copyText ?? src.textContent.replace(/^\$/, "").trim();
+    copy(text, src, () => { btn.textContent = "Copied"; setTimeout(() => (btn.textContent = "Copy"), 1500); });
+  }));
+  document.querySelectorAll(".prompts button").forEach((btn) => btn.addEventListener("click", () => {
+    copy(btn.dataset.copyText, btn, () => { btn.classList.add("done"); setTimeout(() => btn.classList.remove("done"), 1500); });
+  }));
+})();
+</script>
+
+</body>
+</html>
